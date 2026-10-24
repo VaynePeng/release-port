@@ -53,6 +53,8 @@ export type ReleaseRecord = {
   target_count: number
   failed_count: number
   created_at: string
+  started_at?: string | null
+  finished_at?: string | null
 }
 
 export type ReleaseTarget = {
@@ -65,6 +67,24 @@ export type ReleaseTarget = {
   error_category: string | null
   error_message: string | null
   updated_at: string
+  phase: string | null
+  phase_started_at: string | null
+  started_at: string | null
+  finished_at: string | null
+  external_id?: string | null
+  review_status?: string | null
+  review_detail?: string | null
+  review_source?: string | null
+  review_checked_at?: string | null
+  review_sync_error?: string | null
+  status_source?: string | null
+  status_note?: string | null
+}
+
+export type ReleaseDetails = {
+  release: ReleaseRecord & { started_at: string | null; finished_at: string | null; artifact_name: string | null; artifact_size: number | null; artifact_sha256: string | null }
+  targets: ReleaseTarget[]
+  events: Array<{ id: string; target_id: string | null; event_type: string; message: string; created_at: string }>
 }
 
 export type CredentialRecord = {
@@ -72,6 +92,7 @@ export type CredentialRecord = {
   provider: StoreKey
   label: string
   fingerprint: string
+  validation_message: string | null
   validation_status: string
   last_validated_at: string | null
   updated_at: string

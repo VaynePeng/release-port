@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Eye, EyeOff, ShieldCheck, X } from 'lucide-react'
 import { api } from '../lib/api'
 import { storeMeta } from '../lib/meta'
@@ -21,17 +21,30 @@ const fieldsByStore: Record<StoreKey, CredentialField[]> = {
   apple: [{ key: 'issuer_id', label: 'Issuer ID' }, { key: 'key_id', label: 'Key ID' }, { key: 'private_key', label: '.p8 私钥内容', multiline: true }],
 }
 
-export function CredentialDialog({ store, onClose, onSaved }: { store: StoreKey; onClose: () => void; onSaved: () => void }) {
+export function CredentialDialog({ store, configured, onClose, onSaved }: { store: StoreKey; configured: boolean; onClose: () => void; onSaved: () => void }) {
   const [visible, setVisible] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const fields = useMemo(() => fieldsByStore[store], [store])
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(configured)
+  const [loadError, setLoadError] = useState('')
+  const fields = fieldsByStore[store]
+
+  useEffect(() => {
+    if (!configured) return
+    let active = true
+    api.readCredential(store).then(({ fields: saved }) => {
+      if (active) setValues(saved)
+    }).catch((reason: unknown) => {
+      if (active) setLoadError(reason instanceof Error ? reason.message : '读取凭证失败，请关闭后重试')
+    }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [store, configured])
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
     const payload: Record<string, string> = {}
-    for (const field of fields) payload[field.key] = String(form.get(field.key) ?? '')
+    for (const field of fields) payload[field.key] = values[field.key] ?? field.options?.[0]?.value ?? ''
     if (store === 'tencent' && !payload.app_id && !payload.app_id_map) {
       setError('腾讯应用宝需要填写 App ID 或包名映射')
       return
@@ -51,17 +64,19 @@ export function CredentialDialog({ store, onClose, onSaved }: { store: StoreKey;
   return (
     <div className="dialog-backdrop" role="presentation">
       <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="credential-title">
-        <header><div><p className="eyebrow">凭证保险库</p><h2 id="credential-title">配置 {storeMeta[store].name}</h2></div><button className="icon-button" title="关闭" onClick={onClose}><X size={18} /></button></header>
-        <div className="vault-banner"><ShieldCheck size={18} /><div><strong>仅保存在这台设备</strong><p>提交后不可查看原文，更新凭证需要重新填写全部字段。</p></div></div>
+        <header><div><p className="eyebrow">凭证保险库</p><h2 id="credential-title">{configured ? '查看 / 编辑' : '配置'} {storeMeta[store].name}</h2></div><button className="icon-button" title="关闭" disabled={saving} onClick={onClose}><X size={18} /></button></header>
+        <div className="vault-banner"><ShieldCheck size={18} /><div><strong>仅保存在这台设备</strong><p>已保存内容会自动填入，点击“显示明文”即可查看；只需修改需要更新的字段，保存后自动校验。</p></div></div>
         <form onSubmit={submit}>
+          {loading ? <p role="status" className="form-hint">正在读取本机凭证…</p> : null}
+          {loadError ? <p role="alert" className="form-error">{loadError}</p> : null}
           {fields.map((field) => (
             <label className="field" key={field.key}><span>{field.label}</span>
-              {field.options ? <select name={field.key} defaultValue={field.options[0]?.value}>{field.options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select> : field.multiline ? <textarea name={field.key} rows={5} required={!field.optional} spellCheck={false} placeholder={field.placeholder} /> : <input name={field.key} type={field.plain || visible ? 'text' : 'password'} required={!field.optional} autoComplete="off" placeholder={field.placeholder} />}
+              {field.options ? <select name={field.key} disabled={loading || !!loadError || saving} value={values[field.key] ?? field.options[0]?.value} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))}>{field.options.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select> : field.multiline && visible ? <textarea name={field.key} rows={5} disabled={loading || !!loadError || saving} value={values[field.key] ?? ''} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} required={!field.optional} spellCheck={false} placeholder={field.placeholder} autoComplete="off" /> : <input name={field.key} disabled={loading || !!loadError || saving} value={values[field.key] ?? ''} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} type={field.plain || visible ? 'text' : 'password'} required={!field.optional} autoComplete="off" placeholder={field.placeholder} />}
             </label>
           ))}
-          <button type="button" className="reveal-button" onClick={() => setVisible((value) => !value)}>{visible ? <EyeOff size={15} /> : <Eye size={15} />}{visible ? '隐藏输入' : '显示输入'}</button>
+          <button type="button" className="reveal-button" disabled={loading || !!loadError} aria-pressed={visible} onClick={() => setVisible((value) => !value)}>{visible ? <EyeOff size={15} /> : <Eye size={15} />}{visible ? '隐藏明文' : '显示明文'}</button>
           {error ? <p className="form-error">{error}</p> : null}
-          <footer><button type="button" className="button button--quiet" onClick={onClose}>取消</button><button className="button button--primary" disabled={saving}>{saving ? '加密保存中…' : '加密并保存'}</button></footer>
+          <footer><button type="button" className="button button--quiet" disabled={saving} onClick={onClose}>取消</button><button className="button button--primary" disabled={saving || loading || !!loadError}>{saving ? '保存并校验中…' : '保存并校验'}</button></footer>
         </form>
       </section>
     </div>

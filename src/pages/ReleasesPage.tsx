@@ -1,11 +1,15 @@
 import { CalendarClock, Plus } from 'lucide-react'
+import { useState } from 'react'
+import { ReleaseDetailsDialog } from '../components/ReleaseDetailsDialog'
+import { targetProgress } from '../lib/release-progress'
 import { StatusBadge } from '../components/StatusBadge'
 import { StoreMark } from '../components/StoreMark'
 import { PlatformGlyph } from '../components/BrandIcon'
-import { formatDate } from '../lib/meta'
+import { formatDate, statusMeta } from '../lib/meta'
 import type { BootstrapData } from '../types'
 
-export function ReleasesPage({ data, onNew }: { data: BootstrapData; onNew: () => void }) {
+export function ReleasesPage({ data, onNew, onRefresh }: { data: BootstrapData; onNew: () => void; onRefresh: () => void }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   return (
     <>
       <header className="page-header page-header--compact">
@@ -20,15 +24,16 @@ export function ReleasesPage({ data, onNew }: { data: BootstrapData; onNew: () =
             return (
               <article className="release-table__row" role="row" key={release.id}>
                 <div className="release-version"><PlatformGlyph platform={release.platform} /><div><strong>{release.app_name}</strong><p>v{release.version_name}{release.build_number ? ` (${release.build_number})` : ''}</p></div></div>
-                <div className="store-stack">{targets.map((target) => <StoreMark key={target.id} store={target.store} showName={false} />)}</div>
+                <div className="release-channel-summary">{targets.map((target) => <div key={target.id}><StoreMark store={target.store} showName={false} /><span>{target.error_message || (['submitted', 'reviewing', 'approved', 'live', 'uploaded', 'cancelled', 'rejected', 'withdrawn', 'pending_developer_release'].includes(target.status) ? statusMeta[target.status]?.label : target.status === 'uploading' ? targetProgress(target).text : targetProgress(target).phaseLabel)}</span></div>)}</div>
                 <div className="strategy"><CalendarClock size={15} /><span>{strategyLabel[release.strategy] ?? release.strategy}</span></div>
                 <time>{formatDate(release.created_at)}</time>
-                <StatusBadge status={release.status} />
+                <div className="release-status"><StatusBadge status={release.status} /><button className="button button--quiet" onClick={() => setSelectedId(release.id)}>{release.status === 'failed' ? '查看失败详情' : ['queued', 'scheduled', 'running'].includes(release.status) ? '查看进度' : '查看详情'}</button></div>
               </article>
             )
           })}
         </div>
       </section>
+      {selectedId ? <ReleaseDetailsDialog key={selectedId} id={selectedId} onClose={() => setSelectedId(null)} onUpdated={onRefresh} /> : null}
     </>
   )
 }

@@ -85,7 +85,7 @@ function AppActionsDialog({ app, data, onClose, onRefresh, onRelease }: { app: A
           <div className="channel-version-list">
             {stores.map((store) => {
               const channel = channels.find((item) => item.store === store)
-              return <article key={store}><StoreMark store={store} /><div><strong>{channel?.online_version ? `线上 v${channel.online_version}` : '线上版本未同步'}</strong><p>{channel?.review_version ? `审核版本 v${channel.review_version}` : channel?.last_synced_at ? `同步于 ${formatDate(channel.last_synced_at)}` : '等待首次同步'}</p></div><StatusBadge status={channel?.status ?? 'unverified'} /></article>
+              return <article key={store}><StoreMark store={store} /><div><strong>{channel?.online_version ? `线上 v${channel.online_version}` : '线上版本未同步'}</strong><p>{channel?.review_version ? `查询版本 v${channel.review_version}` : channel?.last_synced_at ? `同步于 ${formatDate(channel.last_synced_at)}` : '等待首次同步'}</p>{channel?.raw_status ? <p className="form-hint">{channel.raw_status}</p> : null}</div><StatusBadge status={channel?.status ?? 'unverified'} /></article>
             })}
           </div>
           {message ? <p className="sync-message">{message}</p> : null}

@@ -1,6 +1,26 @@
 import { db } from './db.ts'
+import { decryptSecret } from './vault.ts'
+import { sanitizeReleaseLog } from './release-logs.ts'
 
 type CountRow = { count: number }
+
+export function getReleaseDetails(id: string) {
+  const release = db.prepare(`SELECT r.*, a.name AS app_name,
+    artifact.original_name AS artifact_name, artifact.size AS artifact_size, artifact.sha256 AS artifact_sha256
+    FROM releases r JOIN apps a ON a.id = r.app_id
+    LEFT JOIN artifacts artifact ON artifact.id = r.artifact_id WHERE r.id = ?`).get(id)
+  if (!release) return null
+  const secrets: string[] = []
+  for (const row of db.prepare('SELECT encrypted_payload FROM credentials').all() as Array<{ encrypted_payload: string }>) {
+    try { secrets.push(...Object.values(decryptSecret(row.encrypted_payload))) } catch { /* Other credentials may be unavailable. */ }
+  }
+  const targets = db.prepare('SELECT * FROM release_targets WHERE release_id = ? ORDER BY store').all(id)
+    .map((row) => ({ ...row, error_message: typeof row.error_message === 'string' ? sanitizeReleaseLog(row.error_message, secrets) : null }))
+  const events = db.prepare('SELECT id, target_id, event_type, safe_payload_json, created_at FROM audit_events WHERE release_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 300').all(id)
+    .map((row) => ({ id: row.id, target_id: row.target_id, event_type: row.event_type,
+      message: sanitizeReleaseLog(String(row.safe_payload_json), secrets), created_at: row.created_at }))
+  return { release, targets, events }
+}
 
 export function getBootstrapData() {
   const apps = db.prepare(`
@@ -21,7 +41,7 @@ export function getBootstrapData() {
   `).all()
   const targets = db.prepare('SELECT * FROM release_targets ORDER BY updated_at DESC').all()
   const credentials = db.prepare(`
-    SELECT id, provider, label, fingerprint, validation_status, last_validated_at, created_at, updated_at
+    SELECT id, provider, label, fingerprint, validation_status, validation_message, last_validated_at, created_at, updated_at
     FROM credentials ORDER BY provider
   `).all()
   const activeReleases = db.prepare(`

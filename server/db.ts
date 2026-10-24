@@ -104,6 +104,14 @@ db.exec(`
 const appColumns = db.prepare('PRAGMA table_info(apps)').all() as unknown as Array<{ name: string }>
 if (!appColumns.some(({ name }) => name === 'icon_path')) db.exec('ALTER TABLE apps ADD COLUMN icon_path TEXT')
 
+const credentialColumns = db.prepare('PRAGMA table_info(credentials)').all() as unknown as Array<{ name: string }>
+if (!credentialColumns.some(({ name }) => name === 'validation_message')) db.exec('ALTER TABLE credentials ADD COLUMN validation_message TEXT')
+
+const targetColumns = db.prepare('PRAGMA table_info(release_targets)').all() as unknown as Array<{ name: string }>
+for (const column of ['phase', 'phase_started_at', 'started_at', 'finished_at', 'status_source', 'status_note', 'review_status', 'review_detail', 'review_source', 'review_checked_at', 'review_sync_error', 'external_id']) {
+  if (!targetColumns.some(({ name }) => name === column)) db.exec(`ALTER TABLE release_targets ADD COLUMN ${column} TEXT`)
+}
+
 export function seedDemoData() {
   if (!config.seedDemo) return
   const existing = db.prepare('SELECT COUNT(*) AS count FROM apps').get() as { count: number }
